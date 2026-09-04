@@ -1,33 +1,54 @@
-import { config } from "dotenv";
+import { config } from 'dotenv';
 config();
-import ai from "./utils/ai.js";
-import cosineSimilarity from "compute-cosine-similarity";
+import ai from './utils/ai.js';
+import cosineSimilarity from 'compute-cosine-similarity';
+import readline from 'readline';
+import { stdin, stdout } from 'process';
+
+const rl = readline.createInterface({
+  input: stdin,
+  output: stdout,
+});
 
 async function main() {
-  const texts = [
-    "What is the meaning of life?",
-    "What is the purpose of existence?",
-    "How do I bake a cake?"
-  ];
 
-  const reponse = await ai.models.embedContent({
-    model: "gemini-embedding-001",
-    contents: texts,
-    config: { taskType: 'SEMANTIC_SIMILARITY' }
+  //! generating embedding from user response
+  rl.question('You : ', async (userInput) => {
+    const reponse = await ai.models.embedContent({
+      model: 'gemini-embedding-001',
+      contents: userInput,
+      config: { taskType: 'SEMANTIC_SIMILARITY' },
+    });
+
+    console.log("embedding generated : ", reponse.embeddings);
+
   });
 
-  const embeddings = reponse.embeddings.map(e => e.values);
+  //! cosine similarty is the way to find similarity between tow diff texts 
+  // const texts = [
+  //   "What is the meaning of life?",
+  //   "What is the purpose of existence?",
+  //   "How do I bake a cake?"
+  // ];
 
-  for (let i = 0; i < texts.length; i++) {
-        for (let j = i + 1; j < texts.length; j++) {
-            const text1 = texts[i];
-            const text2 = texts[j];
-            const similarity = cosineSimilarity(embeddings[i], embeddings[j]);
-            console.log(`Similarity between '${text1}' and '${text2}': ${similarity.toFixed(4)}`);
-        }
-    }
+  // const reponse = await ai.models.embedContent({
+  //   model: "gemini-embedding-001",
+  //   contents: texts,
+  //   config: { taskType: 'SEMANTIC_SIMILARITY' }
+  // });
 
-  console.log(reponse.embeddings);
+  // const embeddings = reponse.embeddings.map(e => e.values);
+
+  // for (let i = 0; i < texts.length; i++) {
+  //       for (let j = i + 1; j < texts.length; j++) {
+  //           const text1 = texts[i];
+  //           const text2 = texts[j];
+  //           const similarity = cosineSimilarity(embeddings[i], embeddings[j]);
+  //           console.log(`Similarity between '${text1}' and '${text2}': ${similarity.toFixed(4)}`);
+  //       }
+  //   }
+
+  // console.log(reponse.embeddings);
 }
 
 main();
