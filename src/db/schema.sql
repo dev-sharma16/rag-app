@@ -1,1 +1,9 @@
 CREATE EXTENSION IF NOT EXISTS vector;
+
+CREATE TABLE chunks (
+    id SERIAL PRIMARY KEY,
+    content TEXT NOT NULL,
+    metadata JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    embedding VECTOR(64)
+);
