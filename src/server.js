@@ -2,6 +2,7 @@ import express from "express";
 import { PORT } from "./config/env.js";
 import { db } from "./db/connection.js";
 import { txtToEmbed } from "./embeddings/embed.js";
+import { chunkText } from "./chunking/chunkText.js"
 
 const app = express();
 
@@ -106,6 +107,17 @@ app.post("/search", async (req, res) => {
             error: error.message
         })
     }
+})
+
+app.post("/chunking", (req,res) => {
+    const text = req.body.text;
+
+    const chunks = chunkText(text);
+
+    return res.status(200).json({
+        response : chunks,
+        messsage : "Chunks are generated"
+    })
 })
 
 // app.post("/search/filter", (req, res) => {
