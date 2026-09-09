@@ -52,7 +52,7 @@ app.post("/embed", async (req, res) => {
 
 app.get("/chunks", async (req, res) => {
     try {
-        const chunks = await db`SELECT id, content, embedding, created_at FROM chunks`;
+        const chunks = await db`SELECT id, content, embedding, metadata, created_at FROM chunks`;
         return res.status(200).json({
             data : chunks
         })
@@ -62,6 +62,61 @@ app.get("/chunks", async (req, res) => {
         })
     }
 })
+
+// search for related results with configurable top-k 
+app.post("/search", async (req, res) => {
+    try {
+
+        const query = req.body.q;
+        const k = req.body?.k;
+        const meta = req.body?.topic;
+        // console.log(query)
+    
+        const queryEmbed = await txtToEmbed(query);
+
+        const vector = `[${queryEmbed.join(",")}]`;
+
+        let search;
+        if (meta) {
+            search = await db`SELECT 
+            id,
+            content,
+            embedding <=> ${vector} AS distance
+            FROM chunks
+            WHERE metadata ->> 'topic' = ${meta}
+            ORDER BY embedding <=> ${vector}
+            LIMIT ${k || 3}
+            `;
+        } else {
+            search = await db`SELECT 
+            id,
+            content,
+            embedding <=> ${vector} AS distance
+            FROM chunks
+            ORDER BY embedding <=> ${vector}
+            LIMIT ${k || 3}
+            `;
+        }
+
+        return res.status(200).json({
+            data: search
+        })
+    } catch (error) {
+        return res.status(500).json({
+            error: error.message
+        })
+    }
+})
+
+// app.post("/search/filter", (req, res) => {
+//     try {
+//         const 
+//     } catch (error) {
+//         return res.status(500).json({
+//             error: error.message
+//         })
+//     }
+// })
 
 app.listen(PORT, () => {
     console.log("Server is running on Port : ", PORT);
