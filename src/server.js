@@ -111,8 +111,10 @@ app.post("/search", async (req, res) => {
 
 app.post("/chunking", (req,res) => {
     const text = req.body.text;
+    const maxWords = req.body?.maxWords;
+    const overlap = req.body?.overlap;
 
-    const chunks = chunkText(text);
+    const chunks = chunkText(text, maxWords, overlap);
 
     return res.status(200).json({
         response : chunks,
