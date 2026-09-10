@@ -1,16 +1,26 @@
+export const chunkText = (text, maxWords = 50) => {
+    const paragraphs = text.split(/\n\s*\n/);
 
-export const chunkText = (text, chunkSize = 100, overlap = 20) => {
+    const chunks = [];
+    let currentChunk = "";
 
-  const words = text.split(/\s+/);
+    for (const paragraph of paragraphs) {
+        const words = paragraph.trim().split(/\s+/);
 
-  const chunks = [];
+        if (
+            currentChunk &&
+            currentChunk.split(/\s+/).length + words.length > maxWords
+        ) {
+            chunks.push(currentChunk);
+            currentChunk = "";
+        }
 
-  for(let i=0; i < words.length; i += chunkSize - overlap){
+        currentChunk += (currentChunk ? " " : "") + paragraph.trim();
+    }
 
-    const chunk = words.slice(i, i + chunkSize).join(" ");
+    if (currentChunk) {
+        chunks.push(currentChunk);
+    }
 
-    chunks.push(chunk);
-  }
-
-  return chunks;
-}
+    return chunks;
+};
