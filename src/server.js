@@ -122,6 +122,54 @@ app.post("/chunking", (req,res) => {
     })
 })
 
+// final endpoint doc -> chunks -> embed -> save to db then use /search to search it
+app.post("/ingest", async (req, res) => {
+    try {
+        const text = req.body.text;
+        const maxWords = req.body?.maxWords || 50;
+        const overlap = req.body?.overlap || 0;
+        const topic = req.body?.topic || null;
+
+        const chunks = chunkText(text, maxWords, overlap);
+
+        const insertedChunks = [];
+
+        for (const chunk of chunks) {
+
+            const embeddingVector = await txtToEmbed(chunk);
+
+            const meta = {
+                topic: topic
+            };
+
+            const db_rep = await db`
+                INSERT INTO chunks (content, metadata, embedding)
+                VALUES (
+                    ${chunk},
+                    ${meta},
+                    ${'[' + embeddingVector.join(',') + ']'}
+                )
+                RETURNING id, content, metadata, created_at
+            `;
+
+            insertedChunks.push(db_rep[0]);
+        }
+
+        return res.status(200).json({
+            message: "Document ingested successfully",
+            totalChunks: chunks.length,
+            chunks: insertedChunks
+        });
+
+    } catch (error) {
+        console.error("Ingestion error:", error);
+
+        return res.status(500).json({
+            error: error.message
+        });
+    }
+});
+
 // app.post("/search/filter", (req, res) => {
 //     try {
 //         const 
