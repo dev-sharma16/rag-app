@@ -170,6 +170,214 @@ app.post("/ingest", async (req, res) => {
     }
 });
 
+// keyword search using postgres 'plainto_tsquery' 
+app.post("/keyword-search", async (req, res) => {
+    try {
+        const query = req.body.q;
+
+        const results = await db`
+            SELECT
+                id,
+                content,
+                ts_rank(
+                    to_tsvector('english', content),
+                    plainto_tsquery('english', ${query})
+                ) AS score
+            FROM chunks
+            WHERE to_tsvector('english', content)
+                @@ plainto_tsquery('english', ${query})
+            ORDER BY score DESC
+            LIMIT 5;
+        `;
+
+        return res.status(200).json({
+            data: results
+        });
+
+    } catch (error) {
+        return res.status(500).json({
+            error: error.message
+        });
+    }
+});
+
+app.post("/hybrid-search", async (req, res) => {
+    try {
+        
+        const q = req.body.q;
+        const k = req.body?.k || 3;
+        const candidateLimit = 10;
+
+        // --------------------------------
+        // 1. Generate query embedding
+        // --------------------------------
+
+        const embedding = await txtToEmbed(q);
+
+        const vectors = `[${embedding.join(",")}]`;
+
+        // --------------------------------
+        // 2. Semantic search
+        // --------------------------------
+
+        const semanticSearch = await db`SELECT 
+            id,
+            content,
+            embedding <=> ${vectors} AS distance
+            FROM chunks
+            ORDER BY embedding <=> ${vectors}
+            LIMIT ${candidateLimit || 3}
+            `;
+
+        // --------------------------------
+        // 3. Keyword search
+        // --------------------------------
+
+        const keywordSearch = await db`
+            SELECT
+                id,
+                content,
+                ts_rank(
+                    to_tsvector('english', content),
+                    plainto_tsquery('english', ${q})
+                ) AS score
+            FROM chunks
+            WHERE to_tsvector('english', content)
+                @@ plainto_tsquery('english', ${q})
+            ORDER BY score DESC
+            LIMIT ${candidateLimit || 3};
+        `;
+
+        // console.log("Semantic : ", sematicSearch)
+        // console.log("Keyword : ", keywordSearch)
+
+        // --------------------------------
+        // 4. Merge both result sets
+        // --------------------------------
+
+        const results = new Map();
+
+        semanticSearch.forEach(item => {
+            results.set(item.id, {
+                id: item.id,
+                content: item.content,
+                distance: Number(item.distance),
+                keywordScore: 0
+            })
+        })
+
+        keywordSearch.forEach(item => {
+            if(results.has(item.id)){
+                results.get(item.id).keywordScore = Number(item.score);
+            } else {
+                results.set(item.id, {
+                    id: item.id,
+                    content: item.content,
+                    distance: null,
+                    keywordScore: Number(item.score)
+                });
+            }
+        })
+
+        // --------------------------------
+        // 5. Normalize semantic scores
+        // --------------------------------
+
+        const semanticDistances = semanticSearch.map(
+            item => Number(item.distance)
+        );
+
+        const minDistance = Math.min(...semanticDistances);
+        const maxDistance = Math.max(...semanticDistances);
+
+
+        // --------------------------------
+        // 6. Normalize keyword scores
+        // --------------------------------
+
+        const keywordScores = keywordSearch.map(
+            item => Number(item.score)
+        );
+
+        const maxKeywordScore =
+            keywordScores.length > 0
+                ? Math.max(...keywordScores)
+                : 0;
+
+
+        // --------------------------------
+        // 7. Calculate final hybrid score
+        // --------------------------------
+
+        const finalResults = [...results.values()].map(item => {
+
+            // Semantic relevance
+            let semanticScore = 0;
+
+            if (item.distance !== null) {
+
+                if (maxDistance === minDistance) {
+                    semanticScore = 1;
+                } else {
+                    semanticScore =
+                        1 -
+                        (
+                            (item.distance - minDistance) /
+                            (maxDistance - minDistance)
+                        );
+                }
+            }
+
+
+            // Keyword relevance
+            let keywordRelevance = 0;
+
+            if (item.keywordScore > 0 && maxKeywordScore > 0) {
+                keywordRelevance =
+                    item.keywordScore / maxKeywordScore;
+            }
+
+
+            // Combine both
+            const hybridScore =
+                (0.7 * semanticScore) +
+                (0.3 * keywordRelevance);
+
+
+            return {
+                id: item.id,
+                content: item.content,
+                semanticScore,
+                keywordScore: item.keywordScore,
+                keywordRelevance,
+                hybridScore
+            };
+        });
+
+
+        // --------------------------------
+        // 8. Sort by hybrid score
+        // --------------------------------
+
+        finalResults.sort(
+            (a, b) => b.hybridScore - a.hybridScore
+        );
+
+
+        // --------------------------------
+        // 9. Return top K
+        // --------------------------------
+
+        return res.status(200).json({
+            query: q,
+            results: finalResults.slice(0, k)
+        });
+    } catch (error) {
+        return res.status(500).json({
+            error: error.message
+        });
+    }
+})
 // app.post("/search/filter", (req, res) => {
 //     try {
 //         const 
