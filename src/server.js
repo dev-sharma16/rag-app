@@ -3,6 +3,7 @@ import { PORT } from "./config/env.js";
 import { db } from "./db/connection.js";
 import { txtToEmbed } from "./embeddings/embed.js";
 import { chunkText } from "./chunking/chunkText.js"
+import { rerank } from "./reranking/rerank.js";
 
 const app = express();
 
@@ -363,20 +364,55 @@ app.post("/hybrid-search", async (req, res) => {
             (a, b) => b.hybridScore - a.hybridScore
         );
 
+        // --------------------------------
+        // 9. Reranking using Cohere-ai
+        // --------------------------------
 
-        // --------------------------------
-        // 9. Return top K
-        // --------------------------------
+        const candidates = finalResults.slice(0, candidateLimit);
+
+        const documents = candidates.map(item => item.content);
+
+        const reranked = await rerank(q, documents);
+
+        const finalRerankedResults = reranked.map(item => {
+
+            const candidate = candidates[item.index];
+
+            return {
+                id: candidate.id,
+                content: candidate.content,
+                hybridScore: candidate.hybridScore,
+                rerankScore: item.relevanceScore
+            };
+        
+        });
 
         return res.status(200).json({
             query: q,
-            results: finalResults.slice(0, k)
+            results: finalRerankedResults.slice(0, k)
         });
+
     } catch (error) {
         return res.status(500).json({
             error: error.message
         });
     }
+})
+
+app.post("/reranking", async (req, res) => {
+    const results = await rerank(
+        "PostgreSQL database",
+        [
+            "PostgreSQL is a relational database management system.",
+            "React is a JavaScript library for building user interfaces.",
+            "Docker is a platform for packaging applications into containers."
+        ]
+    );
+
+    return res.status(200).json({
+        message: "Success",
+        response: results
+    })
 })
 // app.post("/search/filter", (req, res) => {
 //     try {
